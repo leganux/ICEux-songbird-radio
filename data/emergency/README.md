@@ -1,0 +1,1 @@
+Put locally stored, legally usable emergency music and `playlist.m3u` here. Liquidsoap must be able to play this directory with FastAPI and MinIO offline. The Compose stack starts with an intentionally empty playlist and a silent technical source only to keep the audio process alive until you add music; that source is not a broadcasting fallback.
