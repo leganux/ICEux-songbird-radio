@@ -6,18 +6,29 @@ import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
-from app.db import Base, SessionLocal, engine
+from app.db import Base, SessionLocal, engine, ensure_lightweight_migrations
 from app import models  # noqa: F401 - registers SQLAlchemy models
-from app.services.library import list_assets, seed_base_media, serialize
+from app.services.automation import (
+    add_asset_to_playlist,
+    create_playlist,
+    create_schedule_rule,
+    list_playlists,
+    list_schedule_rules,
+    materialize_playlist,
+    serialize_playlist,
+    serialize_schedule_rule,
+)
+from app.services.library import add_to_automation_playlist, get_asset, import_upload, list_assets, seed_base_media, serialize
 from app.services.liquidsoap import LiquidsoapService
 from app.services.radio import RadioState
+from app.services.storage import ObjectStorage
 
 settings = get_settings()
 radio = RadioState()
@@ -58,6 +69,7 @@ def require_csrf(request: Request) -> None:
 async def lifespan(_: FastAPI):
     # Phase 1 creates the control-plane database; Alembic owns future migrations.
     Base.metadata.create_all(engine)
+    ensure_lightweight_migrations(engine)
     with SessionLocal() as session:
         seed_base_media(session)
     yield
@@ -75,7 +87,7 @@ async def health() -> dict:
         settings.liquidsoap_host, settings.liquidsoap_port,
         settings.icecast_host, settings.icecast_port, settings.icecast_mount, settings.liquidsoap_socket,
     ).health()
-    return {"status": "ok", "components": {"fastapi": "ok", "liquidsoap": "ok" if ls.connected else "degraded", "sqlite": "pending-phase-1"}, "detail": ls.detail}
+    return {"status": "ok", "components": {"fastapi": "ok", "liquidsoap": "ok" if ls.connected else "degraded", "sqlite": "ok"}, "detail": ls.detail}
 
 
 @app.get("/ready")
@@ -145,6 +157,130 @@ async def library(request: Request, type: str | None = None):
     require_admin(request)
     with SessionLocal() as session:
         return [serialize(asset) for asset in list_assets(session, type)]
+
+
+@app.post("/api/library/upload")
+async def upload_library_asset(
+    request: Request,
+    title: str = Form(""),
+    artist: str = Form(""),
+    type: str = Form("music"),
+    tags: str = Form(""),
+    file: UploadFile = File(),
+):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        try:
+            asset = await import_upload(
+                session,
+                file,
+                title=title.strip(),
+                artist=artist.strip(),
+                asset_type=type.strip() or "music",
+                tags=tags.strip(),
+                storage=ObjectStorage(settings),
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return serialize(asset)
+
+
+@app.post("/api/library/{asset_id}/automation")
+async def add_library_asset_to_automation(asset_id: int, request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        asset = get_asset(session, asset_id)
+        if not asset:
+            raise HTTPException(404, "asset not found")
+        add_to_automation_playlist(asset)
+        return {"ok": True, "asset": serialize(asset)}
+
+
+@app.get("/api/playlists")
+async def playlists(request: Request):
+    require_admin(request)
+    with SessionLocal() as session:
+        return [serialize_playlist(playlist) for playlist in list_playlists(session)]
+
+
+@app.post("/api/playlists")
+async def create_playlist_endpoint(request: Request):
+    require_admin(request)
+    require_csrf(request)
+    body = await request.json()
+    name = str(body.get("name", "")).strip()
+    if not name:
+        raise HTTPException(422, "name is required")
+    with SessionLocal() as session:
+        try:
+            playlist = create_playlist(session, name, str(body.get("description", "")).strip(), str(body.get("rotation_policy", "sequential")).strip())
+        except Exception as exc:
+            raise HTTPException(422, "playlist could not be created") from exc
+        return serialize_playlist(playlist)
+
+
+@app.post("/api/playlists/{playlist_id}/items")
+async def add_playlist_item_endpoint(playlist_id: int, request: Request):
+    require_admin(request)
+    require_csrf(request)
+    body = await request.json()
+    try:
+        asset_id = int(body.get("asset_id"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, "asset_id is required") from exc
+    with SessionLocal() as session:
+        try:
+            add_asset_to_playlist(session, playlist_id, asset_id)
+            playlist = session.get(models.Playlist, playlist_id)
+            return serialize_playlist(playlist)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+
+@app.post("/api/playlists/{playlist_id}/materialize")
+async def materialize_playlist_endpoint(playlist_id: int, request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        try:
+            count = materialize_playlist(session, playlist_id)
+            return {"ok": True, "items": count}
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+
+@app.get("/api/schedules")
+async def schedules(request: Request):
+    require_admin(request)
+    with SessionLocal() as session:
+        return [serialize_schedule_rule(rule) for rule in list_schedule_rules(session)]
+
+
+@app.post("/api/schedules")
+async def create_schedule_endpoint(request: Request):
+    require_admin(request)
+    require_csrf(request)
+    body = await request.json()
+    name = str(body.get("name", "")).strip()
+    cron = str(body.get("cron", "")).strip()
+    missed_policy = str(body.get("missed_policy", "skip")).strip()
+    playlist_id = body.get("playlist_id")
+    if not name or not cron:
+        raise HTTPException(422, "name and cron are required")
+    with SessionLocal() as session:
+        try:
+            rule = create_schedule_rule(
+                session,
+                name=name,
+                playlist_id=int(playlist_id) if playlist_id else None,
+                cron=cron,
+                missed_policy=missed_policy,
+            )
+            return serialize_schedule_rule(rule)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
 
 @app.post("/api/queue")

@@ -12,6 +12,10 @@ Core entities are `MediaAsset`, `Playlist`, `PlaylistItem`, `PlayQueueItem`, `Pl
 
 Redis is present in the local Docker stack as a future-compatible cache/job coordination option. Phase 1 deliberately does not depend on it; the API and audio fallback remain valid with Redis unavailable.
 
+## Library and storage
+
+The Library phase registers audio in SQLite and keeps playable files in `data/library` so Liquidsoap can consume stable local paths under `/radio/data/library`. MinIO is used as a durable object-store mirror with object keys like `library/<hash>-<filename>`; upload success is metadata, not a condition for radio playback. If object storage is unavailable, imports remain valid as local-cache assets and report degraded storage metadata.
+
 ## Phase 1 endpoints
 
 | Area | Endpoint | Purpose |
@@ -20,6 +24,9 @@ Redis is present in the local Docker stack as a future-compatible cache/job coor
 | Auth | `GET/POST /login`, `POST /logout` | one-admin secure session |
 | Radio | `GET /api/radio/state`, `POST /api/player/skip` | state and skip command |
 | Queue | `GET /api/queue`, `POST /api/queue` | inspect/append local queue |
+| Library | `GET /api/library`, `POST /api/library/upload`, `POST /api/library/{id}/automation` | inspect/import audio and add assets to automation |
+| Playlists | `GET/POST /api/playlists`, `POST /api/playlists/{id}/items`, `POST /api/playlists/{id}/materialize` | build rotations and write the active local M3U |
+| Scheduler | `GET/POST /api/schedules` | persist cron rules with explicit missed-event policy |
 | Events | `GET /ws/radio` | state changes |
 
 Later tags: Library, Schedules, AI, Live, Integrations. `POST /api/integrations/n8n/events` validates `X-ICEux-Webhook-Secret` with constant-time comparison and deduplicates `event_id`.

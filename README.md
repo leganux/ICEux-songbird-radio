@@ -17,7 +17,23 @@ FastAPI controls metadata, UI and commands. Liquidsoap owns audio and keeps loca
 - Liquidsoap automation → local emergency fallback script
 - Health/readiness endpoints
 
-This release does not yet provision Icecast, MinIO, AI/TTS, n8n, or WebRTC. Those are the next documented phases; no UI claims they are live.
+## Phase 2
+
+- Audio library backed by SQLite metadata
+- Browser upload into `data/library`
+- MinIO/S3 object mirror for imported media
+- Local cache paths that Liquidsoap can play directly
+- One-click append into the watched automation playlist
+
+## Phase 3
+
+- SQLite playlists and ordered playlist items
+- Rotation policy field for sequential, shuffle and weighted behavior
+- Playlist materialization into the watched local automation M3U
+- Scheduler rules with cron text and explicit missed-event policies
+- Dashboard panels for Playlists and Scheduler
+
+AI/TTS, n8n and WebRTC remain planned phases; no UI claims they are live yet.
 
 ## Run locally
 
@@ -38,7 +54,7 @@ The Icecast image uses its currently published `latest` tag because its old `2.4
 2. Put at least one valid local audio file and M3U entry into `data/emergency` before broadcast testing. The emergency playlist is mandatory. The initial repository tracks are mounted as a local test source for the starter playlists.
 3. Run `docker compose up --build`.
 
-Open the admin app at `http://localhost:8000/admin`, Icecast status at `http://localhost:8001`, and MinIO Console at `http://localhost:9001`. The stream mount is `http://localhost:8001/radio` once valid audio exists.
+Open the admin app at `http://localhost:8000/admin`, Icecast status at `http://localhost:8001`, and MinIO Console at `http://localhost:9001`. The stream mount is `http://localhost:8001/radio` once valid audio exists. The Library section in the admin panel can import audio and add it to the automation playlist.
 
 Use `docker compose down` to stop services while preserving media/database volumes. `docker compose down -v` also deletes the radio state, MinIO objects and Redis data.
 
@@ -55,5 +71,6 @@ MinIO/S3 provides durable media storage with local cache before Liquidsoap playb
 ## Troubleshooting
 
 - `/ready` returns 503 until `ADMIN_PASSWORD` and a non-default `SESSION_SECRET` are configured.
-- A degraded Liquidsoap health state means the control socket is unreachable; it does not prove the audio process is down.
+- A degraded Liquidsoap health state means Icecast is not currently reporting the expected mount, or the private control socket is unreachable for control commands. It does not prove the audio fallback is down.
+- A library item marked `local only` imported successfully but could not mirror to MinIO at that moment.
 - If audio stops, check the local M3U paths and Liquidsoap logs before inspecting FastAPI.

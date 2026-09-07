@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     liquidsoap_host: str = "127.0.0.1"
     liquidsoap_port: int = 1234
     liquidsoap_socket: str = ""
+    s3_endpoint: str = "localhost:9000"
+    s3_access_key: str = "iceux-admin"
+    s3_secret_key: str = "change-me-minio-secret"
+    s3_bucket: str = "iceux-radio"
+    s3_use_ssl: bool = False
 
     @property
     def production(self) -> bool:
@@ -28,6 +33,7 @@ class Settings(BaseSettings):
 
     def ensure_directories(self) -> None:
         Path("data/emergency").mkdir(parents=True, exist_ok=True)
+        Path("data/library").mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache

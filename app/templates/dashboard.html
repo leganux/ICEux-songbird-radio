@@ -1,1 +1,329 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ICEux · Admin</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"><link rel="stylesheet" href="/static/app.css"></head><body data-csrf="{{ csrf_token }}"><nav class="navbar navbar-dark topbar"><span class="navbar-brand"><b>ICEux</b> SONG BIRD <small>RADIO</small></span><span class="onair">● CONTROL PLANE</span><form method="post" action="/logout?csrf_token={{ csrf_token }}"><button class="btn btn-sm btn-outline-light">Logout</button></form></nav><main class="container-fluid py-4"><div class="row"><section class="col-lg-6 mb-3"><div class="panel"><p class="eyebrow">Deck A · Now playing</p><h2 id="now-title">{{ state.now_playing.title }}</h2><p id="now-artist">{{ state.now_playing.artist }}</p><div class="progress"><div class="progress-bar" style="width:18%"></div></div><button id="skip" class="btn btn-danger mt-3">Skip track</button></div></section><section class="col-lg-6 mb-3"><div class="panel"><p class="eyebrow">Deck B · Next</p><h2 id="next-title">{{ state.next_track.title if state.next_track else 'Queue is empty' }}</h2><p id="next-artist">{{ state.next_track.artist if state.next_track else 'Local automation fallback remains available' }}</p><p class="muted">Mount: {{ mount }}</p></div></section><section class="col-lg-7"><div class="panel"><div class="d-flex justify-content-between"><p class="eyebrow">Play queue</p><button class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#queueModal">Add track</button></div><ul id="queue" class="list-group list-group-flush">{% for item in state.queue %}<li class="list-group-item">{{ item.title }} <small>{{ item.artist }}</small></li>{% else %}<li class="list-group-item muted">No manual items queued.</li>{% endfor %}</ul></div></section><section class="col-lg-5"><div class="panel"><p class="eyebrow">Health</p><div class="health"><span>FastAPI</span><b>OK</b></div><div class="health"><span>Liquidsoap</span><b id="liquidsoap">CHECKING</b></div><p class="muted mt-3">Audio fallback is deliberately independent from this dashboard.</p></div></section></div></main><div class="modal fade" id="queueModal"><div class="modal-dialog"><form id="queue-form" class="modal-content"><div class="modal-header"><h5>Add to queue</h5></div><div class="modal-body"><input name="title" class="form-control mb-2" placeholder="Track title" required><input name="artist" class="form-control" placeholder="Artist"></div><div class="modal-footer"><button class="btn btn-primary">Queue track</button></div></form></div></div><script src="https://code.jquery.com/jquery-3.5.1.min.js"></script><script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script><script src="/static/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ICEux · Songbird Radio</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body data-csrf="{{ csrf_token }}" data-mount="{{ mount }}">
+  <div class="console-shell">
+    <aside class="sidebar">
+      <div class="brand-lockup">
+        <div class="brand-mark">IC</div>
+        <div>
+          <h1>ICEux</h1>
+          <span>Songbird Radio</span>
+        </div>
+      </div>
+      <nav class="nav-menu">
+        <a class="active" href="#dashboard">Dashboard</a>
+        <a href="#library-panel">Biblioteca</a>
+        <a href="#playlists-panel">Playlists</a>
+        <a href="#queue-panel">Queue</a>
+        <a href="#cart-panel">Cart Wall</a>
+        <a href="#live-panel">Live / Mic</a>
+        <a href="#scheduler-panel">Scheduler</a>
+        <a href="#ai-panel">AI Studio</a>
+        <a href="#events-panel">Eventos n8n</a>
+        <a href="#health-panel">Health</a>
+      </nav>
+      <div class="station-card">
+        <span>"La radio que te acompaña siempre"</span>
+        <div class="mini-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <strong>ICEux</strong>
+        <small>SONGBIRD RADIO</small>
+      </div>
+    </aside>
+
+    <div class="main-console" id="dashboard">
+      <header class="broadcast-bar">
+        <div class="station-title">
+          <strong>ICEux SONGBIRD RADIO</strong>
+          <span>The first all-in-one AI-powered Icecast2 interface & automator</span>
+        </div>
+        <div class="global-search">
+          <span>Search</span>
+          <input id="library-search" type="search" placeholder="Buscar en biblioteca...">
+        </div>
+        <div class="on-air-badge"><span></span>ON AIR</div>
+        <div class="metric"><small>Listeners</small><b>47</b></div>
+        <div class="metric"><small>Peak</small><b>112</b></div>
+        <div class="metric"><small>Bitrate</small><b>128 <em>kbps</em></b></div>
+        <div class="metric"><small>Formato</small><b>MP3</b></div>
+        <div class="metric"><small>Mount</small><b>{{ mount }}</b></div>
+        <div class="clock-readout">
+          <b id="digital-clock">--:--:--</b>
+          <small id="digital-date">Local time</small>
+        </div>
+        <button class="gear-button" type="button">Settings</button>
+      </header>
+
+      <div class="status-strip" id="health-panel">
+        <span class="status-dot ok"></span><span>Icecast</span><b id="icecast-status">Conectado</b>
+        <span class="status-dot" id="liquidsoap-dot"></span><span>Liquidsoap</span><b id="liquidsoap">CHECKING</b>
+        <span class="status-dot ok"></span><span>SQLite</span><b id="sqlite">CHECKING</b>
+        <span class="status-dot ok"></span><span>Automatización</span><b>Activa</b>
+      </div>
+
+      <main class="console-grid">
+        <section class="console-panel deck-panel deck-a">
+          <div class="panel-title">Deck A - Now Playing</div>
+          <div class="deck-body">
+            <div class="cover-art cover-blue">ICEux</div>
+            <div class="deck-info">
+              <span id="now-artist">{{ state.now_playing.artist }}</span>
+              <h2 id="now-title">{{ state.now_playing.title }}</h2>
+              <p id="now-meta">Automation fallback</p>
+              <div class="tag-row"><span>MUSICA</span><span>Rotación General</span></div>
+              <div class="waveform"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="transport-line"><span>02:14 / 05:01</span><div class="thin-progress"><i style="width:43%"></i></div></div>
+            </div>
+            <div class="vu-stack"><div class="vu"><i></i></div><div class="vu"><i></i></div><small>L&nbsp;&nbsp;R</small></div>
+          </div>
+          <div class="transport">
+            <button class="primary">Pause</button>
+            <button>Stop</button>
+            <button id="skip">Skip</button>
+            <button>Fade</button>
+            <button>Restart</button>
+            <button>Cue</button>
+          </div>
+        </section>
+
+        <section class="console-panel deck-panel deck-b">
+          <div class="panel-title">Deck B - Next</div>
+          <div class="deck-body">
+            <div class="cover-art cover-pink">NEXT</div>
+            <div class="deck-info">
+              <span id="next-artist">{{ state.next_track.artist if state.next_track else 'ICEux' }}</span>
+              <h2 id="next-title">{{ state.next_track.title if state.next_track else 'Queue is empty' }}</h2>
+              <p id="next-meta">Origen: rotation/request/scheduler/manual</p>
+              <div class="tag-row purple"><span>SOLICITUD</span><span>Telegram - n8n</span></div>
+              <div class="waveform short"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="transport-line"><span>Duración 04:09</span><div class="thin-progress"><i style="width:12%"></i></div></div>
+            </div>
+          </div>
+          <div class="transport">
+            <button class="success">Play now</button>
+            <button>Play next</button>
+            <button class="danger">Remove</button>
+            <button>Cue</button>
+          </div>
+        </section>
+
+        <section class="console-panel clock-panel">
+          <div class="panel-title">Reloj</div>
+          <div class="analog-clock"><span></span><i></i></div>
+          <b id="large-clock">--:--:--</b>
+          <div class="clock-next">
+            <span>Próximo clock: <strong>23:00</strong></span>
+            <small>Hora + minuto + cierre aleatorio</small>
+          </div>
+          <button class="small-action">Reproducir ahora</button>
+        </section>
+
+        <section class="console-panel table-panel" id="library-panel">
+          <div class="panel-title row-title"><span>Biblioteca de Musica</span><button data-toggle="modal" data-target="#uploadModal">Upload audio</button></div>
+          <div class="tab-row"><button class="active">Musica</button><button>Comerciales</button><button>Capsulas</button><button>Jingles</button><button>IDs</button><button>Beds</button></div>
+          <div class="table-responsive">
+            <table class="console-table">
+              <thead><tr><th>#</th><th>Titulo</th><th>Tipo</th><th>Duracion</th><th>Storage</th><th></th></tr></thead>
+              <tbody id="library"><tr><td colspan="6">Loading library...</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="console-panel table-panel" id="queue-panel">
+          <div class="panel-title row-title"><span>Play Queue</span><button data-toggle="modal" data-target="#queueModal">Add track</button></div>
+          <div class="tool-row"><button>Up</button><button>Down</button><button>Remove</button><button>Clear manual</button></div>
+          <div class="table-responsive">
+            <table class="console-table">
+              <thead><tr><th>#</th><th>Tipo</th><th>Titulo / Detalles</th><th>Origen</th></tr></thead>
+              <tbody id="queue">
+                {% for item in state.queue %}
+                  <tr><td>{{ loop.index }}</td><td>Manual</td><td>{{ item.title }} <small>{{ item.artist }}</small></td><td>Admin</td></tr>
+                {% else %}
+                  <tr><td colspan="4" class="muted">No manual items queued.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="console-panel cart-wall" id="cart-panel">
+          <div class="panel-title">Cart Wall / Sound FX</div>
+          <div class="tab-row"><button class="active">Todos</button><button>IDs</button><button>Jingles</button><button>FX</button><button>Comerciales</button></div>
+          <div class="cart-grid">
+            <button class="cart blue">RADIO LEGANUX<span>ID</span></button>
+            <button class="cart orange">APPLAUSE<span>FX</span></button>
+            <button class="cart red">BREAKING NEWS<span>FX</span></button>
+            <button class="cart purple">JINGLE 1<span>Jingle</span></button>
+            <button class="cart purple">JINGLE 2<span>Jingle</span></button>
+            <button class="cart blue">CORTINILLA<span>ID</span></button>
+            <button class="cart green">COMERCIAL<span>Commercial</span></button>
+            <button class="cart gold">SWEEP<span>FX</span></button>
+            <button class="cart red">EMERGENCY<span>FX</span></button>
+          </div>
+        </section>
+
+        <section class="console-panel table-panel history-panel">
+          <div class="panel-title">History</div>
+          <table class="console-table compact">
+            <tbody id="history-list">
+              <tr><td>20:48</td><td>Station ID</td><td>Scheduler</td></tr>
+              <tr><td>20:42</td><td>Commercial</td><td>Scheduler</td></tr>
+              <tr><td>20:38</td><td>Capsula AI</td><td>AI Studio</td></tr>
+              <tr><td>20:34</td><td>Rotation track</td><td>Rotación</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="console-panel live-panel" id="live-panel">
+          <div class="panel-title row-title"><span>Live / Microfono</span><strong class="live-pill">EN VIVO</strong></div>
+          <div class="live-layout">
+            <div class="mic-meter"><strong>MIC</strong><div class="mini-vu"><i></i><i></i><i></i><i></i></div></div>
+            <div>
+              <label>Microfono</label>
+              <select class="form-control form-control-sm"><option>MacBook Pro Microphone</option><option>External USB Mic</option></select>
+              <div class="transport mt-3"><button>Mute</button><button>Monitor</button><button>Push to talk</button></div>
+              <div class="transport mt-3"><button class="danger">End live</button><button>Hablando... -12 dB</button></div>
+            </div>
+            <div class="live-modes">
+              <label><input type="radio" name="live-mode"> Mic only</label>
+              <label><input type="radio" name="live-mode" checked> Música actual (ducking)</label>
+              <label><input type="radio" name="live-mode"> Custom bed</label>
+              <label><input type="checkbox" checked> Auto Duck</label>
+              <div class="thin-progress"><i style="width:52%"></i></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="console-panel mixer-panel">
+          <div class="panel-title">Voice FX / Mixer</div>
+          <div class="mixer-grid">
+            <div><span>Musica</span><b>-4 dB</b><div class="fader"><i style="height:65%"></i></div></div>
+            <div><span>Mic</span><b>-3 dB</b><div class="fader"><i style="height:78%"></i></div></div>
+            <div><span>Bed</span><b>-14 dB</b><div class="fader"><i style="height:45%"></i></div></div>
+            <div><span>Master</span><b>0 dB</b><div class="fader"><i style="height:88%"></i></div></div>
+          </div>
+        </section>
+
+        <section class="console-panel" id="playlists-panel">
+          <div class="panel-title row-title"><span>Playlists / Rotations</span><button data-toggle="modal" data-target="#playlistModal">New playlist</button></div>
+          <div id="playlists" class="playlist-list muted">Loading playlists...</div>
+        </section>
+
+        <section class="console-panel" id="scheduler-panel">
+          <div class="panel-title row-title"><span>Scheduler / Automation</span><button data-toggle="modal" data-target="#scheduleModal">New rule</button></div>
+          <div id="schedules" class="schedule-list muted">Loading schedule rules...</div>
+        </section>
+
+        <section class="console-panel" id="ai-panel">
+          <div class="panel-title">AI Studio</div>
+          <div class="pipeline">
+            <span>Script</span><span>TTS</span><span>Processing</span><span>MinIO</span><span>Ready</span>
+          </div>
+          <div class="transport mt-3"><button>Generate Capsule</button><button>Generate Commercial</button><button>Generate Greeting</button></div>
+        </section>
+
+        <section class="console-panel" id="events-panel">
+          <div class="panel-title">External / n8n Events</div>
+          <div class="event-feed">
+            <span>Telegram song request - waiting for integration phase</span>
+            <span>Greeting event - waiting for integration phase</span>
+            <span>Generate capsule - waiting for AI phase</span>
+          </div>
+        </section>
+      </main>
+
+      <footer class="transport-bar">
+        <div class="mini-now"><div class="tiny-cover"></div><span><b id="footer-now-title">{{ state.now_playing.title }}</b><small id="footer-now-artist">{{ state.now_playing.artist }}</small></span></div>
+        <span>2:14 / 5:01</span><div class="thin-progress footer-progress"><i style="width:43%"></i></div>
+        <button>Prev</button><button class="primary">Pause</button><button>Next</button>
+        <div class="mini-next"><div class="tiny-cover alt"></div><span>Siguiente:<b id="footer-next-title">{{ state.next_track.title if state.next_track else 'Queue is empty' }}</b></span></div>
+        <div class="automation-pill"><span class="status-dot ok"></span>AUTOMATION</div>
+      </footer>
+    </div>
+  </div>
+
+  <div class="modal fade" id="queueModal">
+    <div class="modal-dialog">
+      <form id="queue-form" class="modal-content dark-modal">
+        <div class="modal-header"><h5>Add to queue</h5></div>
+        <div class="modal-body">
+          <input name="title" class="form-control mb-2" placeholder="Track title" required>
+          <input name="artist" class="form-control" placeholder="Artist">
+        </div>
+        <div class="modal-footer"><button class="btn btn-primary">Queue track</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="uploadModal">
+    <div class="modal-dialog">
+      <form id="upload-form" class="modal-content dark-modal">
+        <div class="modal-header"><h5>Upload audio</h5></div>
+        <div class="modal-body">
+          <input name="file" type="file" accept="audio/*" class="form-control-file mb-3" required>
+          <input name="title" class="form-control mb-2" placeholder="Title">
+          <input name="artist" class="form-control mb-2" placeholder="Artist">
+          <select name="type" class="form-control mb-2">
+            <option value="music">Music</option>
+            <option value="commercial">Commercial</option>
+            <option value="capsule">Capsule</option>
+            <option value="jingle">Jingle</option>
+            <option value="station_id">Station ID</option>
+            <option value="bed">Bed</option>
+            <option value="effect">Effect</option>
+          </select>
+          <input name="tags" class="form-control" placeholder="Tags">
+        </div>
+        <div class="modal-footer"><button class="btn btn-primary">Import</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="playlistModal">
+    <div class="modal-dialog">
+      <form id="playlist-form" class="modal-content dark-modal">
+        <div class="modal-header"><h5>New playlist</h5></div>
+        <div class="modal-body">
+          <input name="name" class="form-control mb-2" placeholder="Playlist name" required>
+          <input name="description" class="form-control mb-2" placeholder="Description">
+          <select name="rotation_policy" class="form-control">
+            <option value="sequential">Sequential</option>
+            <option value="shuffle">Shuffle</option>
+            <option value="weighted">Weighted</option>
+          </select>
+        </div>
+        <div class="modal-footer"><button class="btn btn-primary">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="scheduleModal">
+    <div class="modal-dialog">
+      <form id="schedule-form" class="modal-content dark-modal">
+        <div class="modal-header"><h5>New schedule rule</h5></div>
+        <div class="modal-body">
+          <input name="name" class="form-control mb-2" placeholder="Rule name" required>
+          <select name="playlist_id" id="schedule-playlist" class="form-control mb-2"></select>
+          <input name="cron" class="form-control mb-2" placeholder="Cron, e.g. 0 * * * *" required>
+          <select name="missed_policy" class="form-control">
+            <option value="skip">Skip if missed</option>
+            <option value="reschedule">Reschedule</option>
+            <option value="play_after_live">Play after live</option>
+          </select>
+        </div>
+        <div class="modal-footer"><button class="btn btn-primary">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
