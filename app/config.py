@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     s3_secret_key: str = "change-me-minio-secret"
     s3_bucket: str = "iceux-radio"
     s3_use_ssl: bool = False
+    n8n_webhook_secret: str = ""
 
     @property
     def production(self) -> bool:

@@ -22,6 +22,8 @@ BASE_MEDIA = (
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"}
 HOST_LIBRARY_DIR = Path("data/library")
 CONTAINER_LIBRARY_DIR = "/radio/data/library"
+HOST_SOUNDFX_DIR = Path("app/static/soundfx")
+CONTAINER_SOUNDFX_DIR = "/radio/data/soundfx"
 
 
 def seed_base_media(session: Session) -> None:
@@ -32,6 +34,39 @@ def seed_base_media(session: Session) -> None:
         if not exists:
             session.add(MediaAsset(type=asset_type, title=title, local_cache_path=container_path, tags="starter,local"))
     session.commit()
+
+
+def seed_soundfx_media(session: Session) -> list[MediaAsset]:
+    """Register bundled sound effects as local effect assets for the cart wall."""
+    if not HOST_SOUNDFX_DIR.exists():
+        return []
+    assets: list[MediaAsset] = []
+    for path in sorted(HOST_SOUNDFX_DIR.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in ALLOWED_EXTENSIONS:
+            continue
+        container_path = f"{CONTAINER_SOUNDFX_DIR}/{path.name}"
+        existing = session.scalar(select(MediaAsset).where(MediaAsset.local_cache_path == container_path))
+        if existing:
+            assets.append(existing)
+            continue
+        media = _metadata_for(path)
+        asset = MediaAsset(
+            type="effect",
+            title=path.stem.replace("-", " ").replace("_", " ").title(),
+            category="soundfx",
+            duration=media.get("duration"),
+            local_cache_path=container_path,
+            mime_type=mimetypes.guess_type(path.name)[0] or "audio/mpeg",
+            codec=path.suffix.lower().lstrip("."),
+            bitrate=media.get("bitrate"),
+            sample_rate=media.get("sample_rate"),
+            metadata_json=json.dumps({"source": "bundled_soundfx", "storage": "local"}),
+            tags="soundfx,cart,local",
+        )
+        session.add(asset)
+        assets.append(asset)
+    session.commit()
+    return assets
 
 
 def list_assets(session: Session, asset_type: str | None = None) -> list[MediaAsset]:

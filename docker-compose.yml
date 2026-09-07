@@ -43,6 +43,7 @@ services:
       - ./liquidsoap/radio.liq:/radio/radio.liq:ro
       - ./data:/radio/data
       - ./app/static/basemusic:/radio/data/basemusic:ro
+      - ./app/static/soundfx:/radio/data/soundfx:ro
       - liquidsoap_control:/run/iceux
     depends_on:
       icecast:

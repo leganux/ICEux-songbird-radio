@@ -14,6 +14,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
 from app.db import Base, SessionLocal, engine, ensure_lightweight_migrations
 from app import models  # noqa: F401 - registers SQLAlchemy models
+from app.services.ai import create_ai_job, list_ai_jobs, mark_ai_job_ready_without_audio, serialize_ai_job
 from app.services.automation import (
     add_asset_to_playlist,
     create_playlist,
@@ -24,8 +25,10 @@ from app.services.automation import (
     serialize_playlist,
     serialize_schedule_rule,
 )
-from app.services.library import add_to_automation_playlist, get_asset, import_upload, list_assets, seed_base_media, serialize
+from app.services.library import add_to_automation_playlist, get_asset, import_upload, list_assets, seed_base_media, seed_soundfx_media, serialize
 from app.services.liquidsoap import LiquidsoapService
+from app.services.integrations import ingest_n8n_event, list_external_events, serialize_external_event, verify_webhook_secret
+from app.services.live import current_live_session, end_live_session, heartbeat_live_session, serialize_live_session, start_live_session
 from app.services.queue import (
     clear_manual_queue,
     create_cart_button,
@@ -39,6 +42,7 @@ from app.services.queue import (
     serialize_cart,
     serialize_history_item,
     serialize_queue_item,
+    seed_default_carts,
 )
 from app.services.storage import ObjectStorage
 
@@ -51,6 +55,7 @@ def radio_snapshot() -> dict:
     with SessionLocal() as session:
         queue_items = list_queue(session)
         history = list_history(session, 8)
+        live = current_live_session(session)
         next_track = serialize_queue_item(queue_items[0]) if queue_items else None
         return {
             "on_air": True,
@@ -58,6 +63,7 @@ def radio_snapshot() -> dict:
             "next_track": next_track,
             "queue": [serialize_queue_item(item) for item in queue_items],
             "history": [serialize_history_item(item) for item in history],
+            "live": serialize_live_session(live),
         }
 
 
@@ -97,6 +103,7 @@ async def lifespan(_: FastAPI):
     ensure_lightweight_migrations(engine)
     with SessionLocal() as session:
         seed_base_media(session)
+        seed_default_carts(session, seed_soundfx_media(session))
     yield
 
 
@@ -112,7 +119,19 @@ async def health() -> dict:
         settings.liquidsoap_host, settings.liquidsoap_port,
         settings.icecast_host, settings.icecast_port, settings.icecast_mount, settings.liquidsoap_socket,
     ).health()
-    return {"status": "ok", "components": {"fastapi": "ok", "liquidsoap": "ok" if ls.connected else "degraded", "sqlite": "ok"}, "detail": ls.detail}
+    return {
+        "status": "ok",
+        "components": {
+            "fastapi": "ok",
+            "liquidsoap": "ok" if ls.connected else "degraded",
+            "sqlite": "ok",
+            "n8n": "configured" if settings.n8n_webhook_secret else "not-configured",
+            "ai": "stub",
+            "tts": "stub",
+            "live": "control-ready",
+        },
+        "detail": ls.detail,
+    }
 
 
 @app.get("/ready")
@@ -405,6 +424,115 @@ async def fire_cart_endpoint(cart_id: int, request: Request):
             raise HTTPException(404, str(exc)) from exc
     await broadcast("queue_changed")
     return {"ok": True, "queue_item": serialize_queue_item(item) if item else None}
+
+
+@app.get("/api/integrations/n8n/events")
+async def n8n_events(request: Request):
+    require_admin(request)
+    with SessionLocal() as session:
+        return [serialize_external_event(event) for event in list_external_events(session)]
+
+
+@app.post("/api/integrations/n8n/events")
+async def receive_n8n_event(request: Request):
+    if not verify_webhook_secret(request.headers.get("X-ICEux-Webhook-Secret"), settings.n8n_webhook_secret):
+        raise HTTPException(401, "invalid webhook secret")
+    payload = await request.json()
+    with SessionLocal() as session:
+        try:
+            event, created = ingest_n8n_event(session, payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    await broadcast("external_event")
+    return {"ok": True, "created": created, "event": serialize_external_event(event)}
+
+
+@app.get("/api/ai/jobs")
+async def ai_jobs(request: Request):
+    require_admin(request)
+    with SessionLocal() as session:
+        return [serialize_ai_job(job) for job in list_ai_jobs(session)]
+
+
+@app.post("/api/ai/jobs")
+async def create_ai_job_endpoint(request: Request):
+    require_admin(request)
+    require_csrf(request)
+    body = await request.json()
+    topic = str(body.get("topic", "")).strip()
+    if not topic:
+        raise HTTPException(422, "topic is required")
+    with SessionLocal() as session:
+        job = create_ai_job(
+            session,
+            job_type=str(body.get("job_type", "capsule")).strip() or "capsule",
+            topic=topic,
+            prompt=str(body.get("prompt", "")).strip(),
+            voice=str(body.get("voice", "")).strip(),
+        )
+    return serialize_ai_job(job)
+
+
+@app.post("/api/ai/jobs/{job_id}/prepare-asset")
+async def prepare_ai_asset(job_id: int, request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        try:
+            job = mark_ai_job_ready_without_audio(session, job_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+    return serialize_ai_job(job)
+
+
+@app.get("/api/live")
+async def live_state(request: Request):
+    require_admin(request)
+    with SessionLocal() as session:
+        return serialize_live_session(current_live_session(session))
+
+
+@app.post("/api/live/start")
+async def start_live(request: Request):
+    require_admin(request)
+    require_csrf(request)
+    body = await request.json()
+    with SessionLocal() as session:
+        try:
+            live = start_live_session(
+                session,
+                mode=str(body.get("mode", "live_current_music")).strip() or "live_current_music",
+                bed_asset_id=int(body["bed_asset_id"]) if body.get("bed_asset_id") else None,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    await broadcast("live_changed")
+    return serialize_live_session(live)
+
+
+@app.post("/api/live/{live_id}/heartbeat")
+async def live_heartbeat(live_id: int, request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        try:
+            live = heartbeat_live_session(session, live_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+    return serialize_live_session(live)
+
+
+@app.post("/api/live/end")
+async def end_live(request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        try:
+            live = end_live_session(session)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+    await broadcast("live_changed")
+    return serialize_live_session(live)
 
 
 @app.post("/api/player/skip")

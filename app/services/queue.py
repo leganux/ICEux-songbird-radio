@@ -142,6 +142,24 @@ def list_carts(session: Session) -> list[CartButton]:
     return list(session.scalars(statement))
 
 
+def seed_default_carts(session: Session, assets: list[MediaAsset]) -> None:
+    colors = ["red", "orange", "blue", "gold", "purple", "green"]
+    for index, asset in enumerate(assets):
+        exists = session.scalar(select(CartButton.id).where(CartButton.media_asset_id == asset.id))
+        if exists:
+            continue
+        cart = CartButton(
+            label=asset.title.upper(),
+            media_asset_id=asset.id,
+            category="fx",
+            action="play_next",
+            color=colors[index % len(colors)],
+            position=index + 1,
+        )
+        session.add(cart)
+    session.commit()
+
+
 def fire_cart(session: Session, cart_id: int) -> PlayQueueItem | None:
     cart = session.get(CartButton, cart_id)
     if not cart or not cart.enabled:

@@ -2,6 +2,7 @@ const csrf = document.body.dataset.csrf;
 let libraryAssets = [];
 let playlists = [];
 let carts = [];
+let liveSession = null;
 
 function textOrDash(value) {
   return value || '-';
@@ -37,6 +38,7 @@ function render(state) {
     );
   });
   renderHistory(state.history || []);
+  renderLive(state.live || { active: false, mode: 'automation' });
 }
 
 function formatDuration(seconds) {
@@ -220,6 +222,40 @@ async function loadSchedules() {
   });
 }
 
+async function loadAiJobs() {
+  const response = await fetch('/api/ai/jobs');
+  const jobs = await response.json();
+  const feed = $('#ai-jobs').empty();
+  if (!jobs.length) {
+    feed.append('<span>No AI jobs yet. Providers are stubbed until the AI/TTS phase is wired.</span>');
+    return;
+  }
+  jobs.forEach((job) => feed.append($('<span>').text(`${job.job_type} · ${job.topic} · ${job.status}`)));
+}
+
+async function loadN8nEvents() {
+  const response = await fetch('/api/integrations/n8n/events');
+  const events = await response.json();
+  const feed = $('#n8n-events').empty();
+  if (!events.length) {
+    feed.append('<span>No external events yet. n8n can POST signed events to /api/integrations/n8n/events.</span>');
+    return;
+  }
+  events.forEach((event) => feed.append($('<span>').text(`${event.source} · ${event.type} · ${event.decision}`)));
+}
+
+function selectedLiveMode() {
+  const labels = $('.live-modes label');
+  if ($(labels[0]).find('input').is(':checked')) return 'live_mic_only';
+  if ($(labels[2]).find('input').is(':checked')) return 'live_custom_bed';
+  return 'live_current_music';
+}
+
+function renderLive(live) {
+  liveSession = live && live.active ? live : null;
+  $('#live-state').text(liveSession ? liveSession.mode.replaceAll('_', ' ') : 'Automation');
+}
+
 function updateClock() {
   const now = new Date();
   const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -299,6 +335,39 @@ $('#cart-form').on('submit', async function onCartSubmit(event) {
   await loadCarts();
 });
 
+$('#ai-form').on('submit', async function onAiSubmit(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(this));
+  const response = await fetch('/api/ai/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    alert((await response.json()).detail || 'Could not create AI job');
+    return;
+  }
+  this.reset();
+  $('#aiModal').modal('hide');
+  await loadAiJobs();
+});
+
+$('#start-live').on('click', async () => {
+  const response = await fetch('/api/live/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+    body: JSON.stringify({ mode: selectedLiveMode() }),
+  });
+  if (!response.ok) alert((await response.json()).detail || 'Could not start live session');
+  await refreshRadioState();
+});
+
+$('#end-live').on('click', async () => {
+  const response = await fetch('/api/live/end', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
+  if (!response.ok) alert((await response.json()).detail || 'No active live session');
+  await refreshRadioState();
+});
+
 $('#schedule-form').on('submit', async function onScheduleSubmit(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(this));
@@ -336,6 +405,8 @@ setInterval(updateClock, 1000);
 refreshRadioState();
 loadLibrary().then(loadPlaylists).then(loadCarts);
 loadSchedules();
+loadAiJobs();
+loadN8nEvents();
 
 const socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/radio');
 socket.onmessage = (event) => render(JSON.parse(event.data).data);

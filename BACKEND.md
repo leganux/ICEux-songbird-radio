@@ -30,6 +30,9 @@ The Library phase registers audio in SQLite and keeps playable files in `data/li
 | Queue | `DELETE /api/queue/{id}`, `POST /api/queue/clear-manual` | skip/remove queued work and preserve history |
 | History | `GET /api/history` | inspect recent play decisions and outcomes |
 | Carts | `GET/POST /api/carts`, `POST /api/carts/{id}/fire` | configure and trigger cart wall buttons |
+| n8n | `GET /api/integrations/n8n/events`, `POST /api/integrations/n8n/events` | signed idempotent external event ingress |
+| AI | `GET/POST /api/ai/jobs`, `POST /api/ai/jobs/{id}/prepare-asset` | create script/TTS pipeline jobs without making playback depend on providers |
+| Live | `GET /api/live`, `POST /api/live/start`, `POST /api/live/{id}/heartbeat`, `POST /api/live/end` | persist live control state and prepare WebRTC/Liquidsoap handoff |
 | Events | `GET /ws/radio` | state changes |
 
 Later tags: Library, Schedules, AI, Live, Integrations. `POST /api/integrations/n8n/events` validates `X-ICEux-Webhook-Secret` with constant-time comparison and deduplicates `event_id`.

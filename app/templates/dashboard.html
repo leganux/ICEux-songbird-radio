@@ -171,7 +171,7 @@
               <label>Microfono</label>
               <select class="form-control form-control-sm"><option>MacBook Pro Microphone</option><option>External USB Mic</option></select>
               <div class="transport mt-3"><button>Mute</button><button>Monitor</button><button>Push to talk</button></div>
-              <div class="transport mt-3"><button class="danger">End live</button><button>Hablando... -12 dB</button></div>
+              <div class="transport mt-3"><button id="start-live" class="success">Go live</button><button id="end-live" class="danger">End live</button><button id="live-state">Automation</button></div>
             </div>
             <div class="live-modes">
               <label><input type="radio" name="live-mode"> Mic only</label>
@@ -204,20 +204,16 @@
         </section>
 
         <section class="console-panel" id="ai-panel">
-          <div class="panel-title">AI Studio</div>
+          <div class="panel-title row-title"><span>AI Studio</span><button data-toggle="modal" data-target="#aiModal">New AI job</button></div>
           <div class="pipeline">
             <span>Script</span><span>TTS</span><span>Processing</span><span>MinIO</span><span>Ready</span>
           </div>
-          <div class="transport mt-3"><button>Generate Capsule</button><button>Generate Commercial</button><button>Generate Greeting</button></div>
+          <div id="ai-jobs" class="event-feed"></div>
         </section>
 
         <section class="console-panel" id="events-panel">
           <div class="panel-title">External / n8n Events</div>
-          <div class="event-feed">
-            <span>Telegram song request - waiting for integration phase</span>
-            <span>Greeting event - waiting for integration phase</span>
-            <span>Generate capsule - waiting for AI phase</span>
-          </div>
+          <div class="event-feed" id="n8n-events"></div>
         </section>
       </main>
 
@@ -334,6 +330,26 @@
           </select>
         </div>
         <div class="modal-footer"><button class="btn btn-primary">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="aiModal">
+    <div class="modal-dialog">
+      <form id="ai-form" class="modal-content dark-modal">
+        <div class="modal-header"><h5>New AI job</h5></div>
+        <div class="modal-body">
+          <select name="job_type" class="form-control mb-2">
+            <option value="capsule">Generate Capsule</option>
+            <option value="commercial">Generate Commercial</option>
+            <option value="greeting">Generate Greeting</option>
+            <option value="station_id">Generate Station ID</option>
+          </select>
+          <input name="topic" class="form-control mb-2" placeholder="Topic" required>
+          <textarea name="prompt" class="form-control mb-2" placeholder="Prompt notes"></textarea>
+          <input name="voice" class="form-control" placeholder="Voice">
+        </div>
+        <div class="modal-footer"><button class="btn btn-primary">Create job</button></div>
       </form>
     </div>
   </div>

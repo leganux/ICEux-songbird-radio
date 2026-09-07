@@ -133,3 +133,55 @@ class CartButton(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     media_asset: Mapped[MediaAsset | None] = relationship()
+
+
+class ExternalEvent(Base):
+    __tablename__ = "external_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    source: Mapped[str] = mapped_column(String(80), default="n8n", index=True)
+    type: Mapped[str] = mapped_column(String(80), default="event", index=True)
+    status: Mapped[str] = mapped_column(String(50), default="received", index=True)
+    decision: Mapped[str] = mapped_column(String(120), default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AIJob(Base):
+    __tablename__ = "ai_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_type: Mapped[str] = mapped_column(String(80), default="capsule", index=True)
+    topic: Mapped[str] = mapped_column(String(255), default="")
+    prompt: Mapped[str] = mapped_column(Text, default="")
+    script: Mapped[str] = mapped_column(Text, default="")
+    script_provider: Mapped[str] = mapped_column(String(80), default="stub")
+    tts_provider: Mapped[str] = mapped_column(String(80), default="stub")
+    voice: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(50), default="draft", index=True)
+    audio_asset_id: Mapped[int | None] = mapped_column(ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True, index=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    audio_asset: Mapped[MediaAsset | None] = relationship()
+
+
+class LiveSession(Base):
+    __tablename__ = "live_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    mode: Mapped[str] = mapped_column(String(50), default="live_current_music", index=True)
+    status: Mapped[str] = mapped_column(String(50), default="active", index=True)
+    mic_gain_db: Mapped[int] = mapped_column(Integer, default=-3)
+    music_gain_db: Mapped[int] = mapped_column(Integer, default=-4)
+    duck_gain_db: Mapped[int] = mapped_column(Integer, default=-18)
+    bed_asset_id: Mapped[int | None] = mapped_column(ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    bed_asset: Mapped[MediaAsset | None] = relationship()

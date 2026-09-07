@@ -46,8 +46,28 @@ FastAPI controls metadata, UI and commands. Liquidsoap owns audio and keeps loca
 - Cart actions for `play_next`, `play_now`, `overlay` and `duck_play` intent
 - Cart firing into the queue without making browser/UI audio-critical
 - Cart modal wired to library assets
+- Bundled default sound effects in `app/static/soundfx` seed local `effect` assets and cart buttons automatically
 
-AI/TTS, n8n and WebRTC remain planned phases; no UI claims they are live yet.
+## Phase 6
+
+- Signed n8n ingress with `X-ICEux-Webhook-Secret`
+- Idempotent `event_id` handling
+- External song/greeting events can enqueue queue work
+- Dashboard feed for received n8n decisions
+
+## Phase 7
+
+- AI Studio job records for capsule, commercial, greeting and station ID generation
+- Stub script/TTS providers that expose the pipeline without pretending provider audio exists
+- Pending AI assets are saved disabled until real TTS produces playable audio
+
+## Phase 8
+
+- Live session control state with modes for mic-only, current-music ducking and custom bed
+- Start, heartbeat and end APIs
+- UI state ready for WebRTC ingress and Liquidsoap handoff
+
+Real AI provider calls, real TTS audio rendering and browser WebRTC ingest remain planned integration phases.
 
 ## Run locally
 
