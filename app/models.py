@@ -76,3 +76,60 @@ class ScheduleRule(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     playlist: Mapped[Playlist | None] = relationship()
+
+
+class PlayQueueItem(Base):
+    __tablename__ = "play_queue_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    media_asset_id: Mapped[int | None] = mapped_column(ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True, index=True)
+    type: Mapped[str] = mapped_column(String(50), default="music", index=True)
+    source: Mapped[str] = mapped_column(String(50), default="manual", index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=50, index=True)
+    title: Mapped[str] = mapped_column(String(255), default="")
+    artist: Mapped[str] = mapped_column(String(255), default="")
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(50), default="queued", index=True)
+    missed_policy: Mapped[str] = mapped_column(String(50), default="skip")
+    insertion_policy: Mapped[str] = mapped_column(String(50), default="append")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    media_asset: Mapped[MediaAsset | None] = relationship()
+
+
+class PlayHistory(Base):
+    __tablename__ = "play_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    media_asset_id: Mapped[int | None] = mapped_column(ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(255), default="")
+    artist: Mapped[str] = mapped_column(String(255), default="")
+    type: Mapped[str] = mapped_column(String(50), default="music", index=True)
+    source: Mapped[str] = mapped_column(String(50), default="manual", index=True)
+    result: Mapped[str] = mapped_column(String(50), default="completed", index=True)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    played_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    duration: Mapped[float | None] = mapped_column(default=None)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    media_asset: Mapped[MediaAsset | None] = relationship()
+
+
+class CartButton(Base):
+    __tablename__ = "cart_buttons"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    label: Mapped[str] = mapped_column(String(120), index=True)
+    media_asset_id: Mapped[int | None] = mapped_column(ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True, index=True)
+    category: Mapped[str] = mapped_column(String(60), default="fx", index=True)
+    action: Mapped[str] = mapped_column(String(50), default="play_next")
+    color: Mapped[str] = mapped_column(String(30), default="blue")
+    hotkey: Mapped[str] = mapped_column(String(30), default="")
+    position: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    media_asset: Mapped[MediaAsset | None] = relationship()

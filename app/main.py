@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import hmac
 import secrets
@@ -27,18 +26,44 @@ from app.services.automation import (
 )
 from app.services.library import add_to_automation_playlist, get_asset, import_upload, list_assets, seed_base_media, serialize
 from app.services.liquidsoap import LiquidsoapService
-from app.services.radio import RadioState
+from app.services.queue import (
+    clear_manual_queue,
+    create_cart_button,
+    enqueue_asset,
+    enqueue_manual_title,
+    fire_cart,
+    list_carts,
+    list_history,
+    list_queue,
+    remove_queue_item,
+    serialize_cart,
+    serialize_history_item,
+    serialize_queue_item,
+)
 from app.services.storage import ObjectStorage
 
 settings = get_settings()
-radio = RadioState()
 clients: set[WebSocket] = set()
 login_attempts: dict[str, deque[float]] = defaultdict(deque)
 
 
+def radio_snapshot() -> dict:
+    with SessionLocal() as session:
+        queue_items = list_queue(session)
+        history = list_history(session, 8)
+        next_track = serialize_queue_item(queue_items[0]) if queue_items else None
+        return {
+            "on_air": True,
+            "now_playing": {"title": "Emergency playlist ready", "artist": "ICEux", "type": "music", "source": "fallback"},
+            "next_track": next_track,
+            "queue": [serialize_queue_item(item) for item in queue_items],
+            "history": [serialize_history_item(item) for item in history],
+        }
+
+
 async def broadcast(event: str) -> None:
     stale = []
-    payload = {"event": event, "data": radio.snapshot()}
+    payload = {"event": event, "data": radio_snapshot()}
     for client in clients:
         try:
             await client.send_json(payload)
@@ -137,19 +162,42 @@ async def root():
 async def dashboard(request: Request):
     if not is_authenticated(request):
         return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse(request, "dashboard.html", {"state": radio.snapshot(), "mount": settings.icecast_mount, "csrf_token": request.session["csrf"]})
+    return templates.TemplateResponse(request, "dashboard.html", {"state": radio_snapshot(), "mount": settings.icecast_mount, "csrf_token": request.session["csrf"]})
 
 
 @app.get("/api/radio/state")
 async def state(request: Request):
     require_admin(request)
-    return radio.snapshot()
+    return radio_snapshot()
 
 
 @app.get("/api/queue")
 async def queue(request: Request):
     require_admin(request)
-    return radio.snapshot()["queue"]
+    return radio_snapshot()["queue"]
+
+
+@app.delete("/api/queue/{item_id}")
+async def remove_from_queue(item_id: int, request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        try:
+            remove_queue_item(session, item_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+    await broadcast("queue_changed")
+    return {"ok": True}
+
+
+@app.post("/api/queue/clear-manual")
+async def clear_manual_queue_endpoint(request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        count = clear_manual_queue(session)
+    await broadcast("queue_changed")
+    return {"ok": True, "items": count}
 
 
 @app.get("/api/library")
@@ -289,11 +337,74 @@ async def enqueue(request: Request):
     require_csrf(request)
     body = await request.json()
     title = str(body.get("title", "")).strip()
-    if not title:
+    asset_id = body.get("asset_id")
+    if not title and not asset_id:
         raise HTTPException(422, "title is required")
-    item = radio.enqueue(title, str(body.get("artist", "")).strip())
+    with SessionLocal() as session:
+        if asset_id:
+            item = enqueue_asset(
+                session,
+                int(asset_id),
+                source=str(body.get("source", "manual")).strip() or "manual",
+                insertion_policy=str(body.get("insertion_policy", "append")).strip() or "append",
+                missed_policy=str(body.get("missed_policy", "skip")).strip() or "skip",
+            )
+        else:
+            item = enqueue_manual_title(session, title, str(body.get("artist", "")).strip())
     await broadcast("queue_changed")
-    return item
+    return serialize_queue_item(item)
+
+
+@app.get("/api/history")
+async def history(request: Request):
+    require_admin(request)
+    with SessionLocal() as session:
+        return [serialize_history_item(item) for item in list_history(session)]
+
+
+@app.get("/api/carts")
+async def carts(request: Request):
+    require_admin(request)
+    with SessionLocal() as session:
+        return [serialize_cart(cart) for cart in list_carts(session)]
+
+
+@app.post("/api/carts")
+async def create_cart(request: Request):
+    require_admin(request)
+    require_csrf(request)
+    body = await request.json()
+    label = str(body.get("label", "")).strip()
+    if not label:
+        raise HTTPException(422, "label is required")
+    asset_id = body.get("asset_id")
+    with SessionLocal() as session:
+        try:
+            cart = create_cart_button(
+                session,
+                label=label,
+                asset_id=int(asset_id) if asset_id else None,
+                category=str(body.get("category", "fx")).strip() or "fx",
+                action=str(body.get("action", "play_next")).strip() or "play_next",
+                color=str(body.get("color", "blue")).strip() or "blue",
+                hotkey=str(body.get("hotkey", "")).strip(),
+            )
+            return serialize_cart(cart)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/carts/{cart_id}/fire")
+async def fire_cart_endpoint(cart_id: int, request: Request):
+    require_admin(request)
+    require_csrf(request)
+    with SessionLocal() as session:
+        try:
+            item = fire_cart(session, cart_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+    await broadcast("queue_changed")
+    return {"ok": True, "queue_item": serialize_queue_item(item) if item else None}
 
 
 @app.post("/api/player/skip")

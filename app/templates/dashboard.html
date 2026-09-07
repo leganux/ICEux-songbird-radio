@@ -153,31 +153,14 @@
         </section>
 
         <section class="console-panel cart-wall" id="cart-panel">
-          <div class="panel-title">Cart Wall / Sound FX</div>
+          <div class="panel-title row-title"><span>Cart Wall / Sound FX</span><button data-toggle="modal" data-target="#cartModal">New cart</button></div>
           <div class="tab-row"><button class="active">Todos</button><button>IDs</button><button>Jingles</button><button>FX</button><button>Comerciales</button></div>
-          <div class="cart-grid">
-            <button class="cart blue">RADIO LEGANUX<span>ID</span></button>
-            <button class="cart orange">APPLAUSE<span>FX</span></button>
-            <button class="cart red">BREAKING NEWS<span>FX</span></button>
-            <button class="cart purple">JINGLE 1<span>Jingle</span></button>
-            <button class="cart purple">JINGLE 2<span>Jingle</span></button>
-            <button class="cart blue">CORTINILLA<span>ID</span></button>
-            <button class="cart green">COMERCIAL<span>Commercial</span></button>
-            <button class="cart gold">SWEEP<span>FX</span></button>
-            <button class="cart red">EMERGENCY<span>FX</span></button>
-          </div>
+          <div class="cart-grid" id="cart-grid"></div>
         </section>
 
         <section class="console-panel table-panel history-panel">
           <div class="panel-title">History</div>
-          <table class="console-table compact">
-            <tbody id="history-list">
-              <tr><td>20:48</td><td>Station ID</td><td>Scheduler</td></tr>
-              <tr><td>20:42</td><td>Commercial</td><td>Scheduler</td></tr>
-              <tr><td>20:38</td><td>Capsula AI</td><td>AI Studio</td></tr>
-              <tr><td>20:34</td><td>Rotation track</td><td>Rotación</td></tr>
-            </tbody>
-          </table>
+          <table class="console-table compact"><tbody id="history-list"><tr><td class="muted">No history yet.</td></tr></tbody></table>
         </section>
 
         <section class="console-panel live-panel" id="live-panel">
@@ -315,6 +298,39 @@
             <option value="skip">Skip if missed</option>
             <option value="reschedule">Reschedule</option>
             <option value="play_after_live">Play after live</option>
+          </select>
+        </div>
+        <div class="modal-footer"><button class="btn btn-primary">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="cartModal">
+    <div class="modal-dialog">
+      <form id="cart-form" class="modal-content dark-modal">
+        <div class="modal-header"><h5>New cart</h5></div>
+        <div class="modal-body">
+          <input name="label" class="form-control mb-2" placeholder="Cart label" required>
+          <select name="asset_id" id="cart-asset" class="form-control mb-2"></select>
+          <select name="category" class="form-control mb-2">
+            <option value="fx">FX</option>
+            <option value="jingle">Jingle</option>
+            <option value="station_id">Station ID</option>
+            <option value="commercial">Commercial</option>
+          </select>
+          <select name="action" class="form-control mb-2">
+            <option value="play_next">Play next</option>
+            <option value="play_now">Play now</option>
+            <option value="overlay">Overlay</option>
+            <option value="duck_play">Duck + play</option>
+          </select>
+          <select name="color" class="form-control">
+            <option value="blue">Blue</option>
+            <option value="purple">Purple</option>
+            <option value="green">Green</option>
+            <option value="orange">Orange</option>
+            <option value="gold">Gold</option>
+            <option value="red">Red</option>
           </select>
         </div>
         <div class="modal-footer"><button class="btn btn-primary">Create</button></div>

@@ -27,6 +27,9 @@ The Library phase registers audio in SQLite and keeps playable files in `data/li
 | Library | `GET /api/library`, `POST /api/library/upload`, `POST /api/library/{id}/automation` | inspect/import audio and add assets to automation |
 | Playlists | `GET/POST /api/playlists`, `POST /api/playlists/{id}/items`, `POST /api/playlists/{id}/materialize` | build rotations and write the active local M3U |
 | Scheduler | `GET/POST /api/schedules` | persist cron rules with explicit missed-event policy |
+| Queue | `DELETE /api/queue/{id}`, `POST /api/queue/clear-manual` | skip/remove queued work and preserve history |
+| History | `GET /api/history` | inspect recent play decisions and outcomes |
+| Carts | `GET/POST /api/carts`, `POST /api/carts/{id}/fire` | configure and trigger cart wall buttons |
 | Events | `GET /ws/radio` | state changes |
 
 Later tags: Library, Schedules, AI, Live, Integrations. `POST /api/integrations/n8n/events` validates `X-ICEux-Webhook-Secret` with constant-time comparison and deduplicates `event_id`.

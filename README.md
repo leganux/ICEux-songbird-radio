@@ -33,6 +33,20 @@ FastAPI controls metadata, UI and commands. Liquidsoap owns audio and keeps loca
 - Scheduler rules with cron text and explicit missed-event policies
 - Dashboard panels for Playlists and Scheduler
 
+## Phase 4
+
+- Persistent play queue with priority ordering
+- EventArbitrator foundation for manual, request, scheduler, commercial, capsule, clock and rotation sources
+- Queue remove/clear actions that write play history
+- History API and dashboard feed
+
+## Phase 5
+
+- Persistent Cart Wall buttons
+- Cart actions for `play_next`, `play_now`, `overlay` and `duck_play` intent
+- Cart firing into the queue without making browser/UI audio-critical
+- Cart modal wired to library assets
+
 AI/TTS, n8n and WebRTC remain planned phases; no UI claims they are live yet.
 
 ## Run locally
